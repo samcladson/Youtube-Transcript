@@ -1,0 +1,17 @@
+html {
+  scroll-behavior: smooth;
+}
+
+.transcript-container {
+  overflow-y: scroll;
+  max-height: 53vh;
+  margin-top: 50px;
+}
+::-webkit-scrollbar {
+  width: 5px;
+  height: 100%;
+}
+::-webkit-scrollbar-thumb {
+  background-color: lightgray;
+  border-radius: 25px;
+}

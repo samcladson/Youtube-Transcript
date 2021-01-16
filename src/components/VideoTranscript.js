@@ -1,20 +1,24 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { FormControl, InputGroup, Button, Card, Image } from "react-bootstrap";
 import axios from "axios";
+import getYoutubeId from "get-youtube-id";
 
 const VideoTranscript = () => {
   const [link, setLink] = useState("");
   const [player, setPlayer] = useState();
-  const [transcript, setTranscript] = useState("");
+  const [transcript, setTranscript] = useState([]);
+  const [transcriptResult, setTranscriptResult] = useState();
+  const [subtitleStart, setSubtitleStart] = useState(0);
+  const scrollContainer = useRef(null);
 
-  useEffect(() => {
-    if (!window.YT) {
-      var tag = document.createElement("script");
-      tag.src = "https://www.youtube.com/player_api";
-      var firstScriptTag = document.getElementsByTagName("script")[0];
-      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-    }
-  }, []);
+  // Function definitions
+
+  const scrollToBottom = () => {
+    scrollContainer.current.scroll({
+      top: scrollContainer.current.scrollHeight,
+      behaviour: "smooth",
+    });
+  };
 
   const handleInput = (e) => {
     setLink(e.target.value);
@@ -39,26 +43,31 @@ const VideoTranscript = () => {
   const bookmark = () => {
     const time = parseInt(player.getCurrentTime());
     if (time > 0) {
-      axios
-        .get(`http://localhost:5000/api/cclist/${time}`)
-        .then((res) => {
-          if (res.status === 200) {
-            const timeframe = timeFormat(res);
-            const data = {
-              start: timeframe,
-              text: res.data.text,
-            };
-            setTranscript(data);
-          } else {
-            console.error(res.data);
-          }
-        })
-        .catch((err) => {
-          console.log(err);
-        });
+      if (subtitleStart < time) {
+        axios
+          .get(`http://localhost:5000/api/cclist/${time}`)
+          .then((res) => {
+            if (res.status === 200) {
+              const timeframe = timeFormat(res);
+              const data = {
+                start: timeframe,
+                text: res.data.text,
+              };
+
+              const dataArray = [...transcript];
+              dataArray.push(data);
+              setTranscript(dataArray);
+              setSubtitleStart(res.data.start + res.data.duration);
+            } else {
+              console.error(res.data);
+            }
+          })
+          .catch((err) => {
+            console.log(err);
+          });
+      }
     }
   };
-
   const handleSubmit = () => {
     if (player) {
       const frame = document.querySelector("#player");
@@ -71,12 +80,17 @@ const VideoTranscript = () => {
       setPlayer(null);
     }
     if (link) {
-      const videoId = link.split("/").slice(-1).pop();
-
+      const videoId = getYoutubeId(link);
       axios
         .get(`http://localhost:5000/api/transcript/${videoId}`)
         .then((res) => {
-          res.status === 200 ? console.log(res.data) : console.error(res.data);
+          if (res.status === 200) {
+            res.data.status === 200
+              ? setTranscriptResult(res.data)
+              : setTranscriptResult(res.data);
+          } else {
+            console.error(res.data);
+          }
         });
 
       const playerObj = new window.YT.Player("player", {
@@ -91,6 +105,19 @@ const VideoTranscript = () => {
     }
   };
 
+  // useEffect section
+  useEffect(() => {
+    if (!window.YT) {
+      var tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/player_api";
+      var firstScriptTag = document.getElementsByTagName("script")[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    }
+  }, []);
+
+  useEffect(scrollToBottom, [transcript]);
+
+  // JSX Section
   return (
     <div className="container p-5" style={{ height: "100vh" }}>
       <div className="row">
@@ -130,20 +157,46 @@ const VideoTranscript = () => {
             )}
           </div>
         </div>
-        <div className="col-sm-12 col-md-12 col-lg-6">
-          <div className="mt-5">
-            <Card
-              className="mb-3"
-              style={{ boxShadow: "5px 5px 15px rgba(0,0,0,0.2)" }}
+        <div
+          className="transcript-container col-sm-12 col-md-12 col-lg-6"
+          ref={scrollContainer}
+        >
+          {transcriptResult ? (
+            <div
+              className={
+                transcriptResult.status === 200
+                  ? "alert alert-success alert-dismissible fade show"
+                  : "alert alert-danger alert-dismissible fade show"
+              }
+              role="alert"
             >
-              <Card.Header>
-                Transcript {transcript ? "at" + " " + transcript.start : null}
-              </Card.Header>
-              <Card.Body>
-                <p>{transcript.text}</p>
-              </Card.Body>
-            </Card>
-          </div>
+              {transcriptResult.text}
+            </div>
+          ) : null}
+          {transcript.length !== 0 ? (
+            transcript.map((res, i) => {
+              return (
+                <div key={i}>
+                  <Card
+                    className="m-3"
+                    style={{
+                      boxShadow: "0px 0px 15px rgba(0,0,0,0.2)",
+                      height: "auto",
+                    }}
+                  >
+                    <Card.Header>
+                      Transcript {transcript ? "at" + " " + res.start : null}
+                    </Card.Header>
+                    <Card.Body>
+                      <p>{res.text}</p>
+                    </Card.Body>
+                  </Card>
+                </div>
+              );
+            })
+          ) : (
+            <h4>Transcript will appear here</h4>
+          )}
         </div>
       </div>
     </div>
